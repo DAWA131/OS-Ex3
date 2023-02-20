@@ -12,6 +12,7 @@
 
 #define TYPE_FILE 0
 #define TYPE_DIR 1
+#define TYPE_EMPTY 2
 #define READ 0x04
 #define WRITE 0x02
 #define EXECUTE 0x01
@@ -20,7 +21,7 @@ struct dir_entry {
     char file_name[56]; // name of the file / sub-directory
     uint32_t size; // size of the file in bytes
     uint16_t first_blk; // index in the FAT for the first block of the file
-    uint8_t type; // directory (1) or file (0)
+    uint8_t type; // directory (1) or file (0) or empty(2)
     uint8_t access_rights; // read (0x04), write (0x02), execute (0x01)
 };
 
@@ -29,6 +30,15 @@ private:
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE/2];
+
+    //Reads from block returns 64 dir_entries and number of taken blocks
+    void readDirBlock(int block, dir_entry* in, int& numbBlocks); 
+
+    //Writes a block of dir_enteries to the disk
+    void writeDirToDisk(int block, dir_entry* in);
+
+    //Makes a block of 64 dir_entries with all dirs empty
+    void makeDirBlock(dir_entry* in, int numbBlocks = 64, int startIndex = 0); 
 
 public:
     FS();

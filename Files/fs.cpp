@@ -1,6 +1,33 @@
 #include <iostream>
 #include "fs.h"
 
+void FS::readDirBlock(int block, dir_entry *in, int& numbBlocks)
+{
+    disk.read(block, (uint8_t*) in);
+
+    for (int i = 0; i < 64; i++)
+    {
+        if(in[i].type != TYPE_EMPTY)
+        {
+            numbBlocks++;
+        }
+    }
+    
+}
+
+void FS::writeDirToDisk(int block, dir_entry *in)
+{
+    disk.write(block, (uint8_t*)in);
+}
+
+void FS::makeDirBlock(dir_entry *in, int numbBlocks, int startIndex)
+{
+    for (int i = startIndex; i < numbBlocks; i++)
+    {
+        in[i].type = TYPE_EMPTY;
+    }
+}
+
 FS::FS()
 {
     std::cout << "FS::FS()... Creating file system\n";
@@ -48,6 +75,10 @@ int
 FS::ls()
 {
     std::cout << "FS::ls()\n";
+    std::cout << "Name\tType\tAccess\tSize\n";
+    std::string name, type, access, size;
+
+    
     return 0;
 }
 
