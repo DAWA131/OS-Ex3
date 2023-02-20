@@ -1,5 +1,7 @@
 #include <iostream>
 #include <cstdint>
+#include <cstring>
+#include <vector>
 #include "disk.h"
 
 #ifndef __FS_H__
@@ -27,6 +29,9 @@ struct dir_entry {
 
 class FS {
 private:
+    int numbEnteries;
+    dir_entry workingDirectory[64];
+    
     Disk disk;
     // size of a FAT entry is 2 bytes
     int16_t fat[BLOCK_SIZE/2];

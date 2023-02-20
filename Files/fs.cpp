@@ -26,11 +26,20 @@ void FS::makeDirBlock(dir_entry *in, int numbBlocks, int startIndex)
     {
         in[i].type = TYPE_EMPTY;
     }
+    this->numbEnteries = 0;
 }
 
 FS::FS()
 {
     std::cout << "FS::FS()... Creating file system\n";
+    disk.read(FAT_BLOCK, (uint8_t*)fat);
+
+    if(fat[ROOT_BLOCK] != FAT_EOF || true) // no saved FS so make a new start
+    {
+        makeDirBlock(this->workingDirectory);
+        writeDirToDisk(ROOT_BLOCK, this->workingDirectory);
+        this->format();
+    }
 }
 
 FS::~FS()
@@ -50,6 +59,7 @@ FS::format()
     fat[FAT_BLOCK] = FAT_EOF;
     fat[ROOT_BLOCK] = FAT_EOF;
     disk.write(FAT_BLOCK, (uint8_t*)fat);
+    makeDirBlock(this->workingDirectory);
     return 0;
 }
 
@@ -59,6 +69,10 @@ int
 FS::create(std::string filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
+    strcpy(this->workingDirectory[this->numbEnteries].file_name, filepath.c_str());
+    this->workingDirectory[this->numbEnteries].type = TYPE_FILE;
+    this->workingDirectory[this->numbEnteries].size = 10;
+    this->numbEnteries++;
     return 0;
 }
 
@@ -77,8 +91,25 @@ FS::ls()
     std::cout << "FS::ls()\n";
     std::cout << "Name\tType\tAccess\tSize\n";
     std::string name, type, access, size;
+    uint32_t aRights;
 
-    
+    for (int i = 0; i < this->numbEnteries; i++)
+    {
+        name = this->workingDirectory[i].file_name;
+        size = std::to_string(this->workingDirectory[i].size);
+        aRights = this->workingDirectory[i].access_rights;
+        if (this->workingDirectory[i].type == TYPE_FILE)
+        {
+            type = "File";
+        }
+        else
+        {
+            type = "Dir";
+            size = "-";
+        }
+        std::cout << name << "\t" << type << "\t" << access << "\t" << size << "\n";
+    }
+
     return 0;
 }
 
