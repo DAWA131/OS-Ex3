@@ -16,6 +16,13 @@ int
 FS::format()
 {
     std::cout << "FS::format()\n";
+    for (int i = 2; i < BLOCK_SIZE/2; i++)
+    {
+        fat[i] = FAT_FREE;
+    }
+    fat[FAT_BLOCK] = FAT_EOF;
+    fat[ROOT_BLOCK] = FAT_EOF;
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
     return 0;
 }
 
