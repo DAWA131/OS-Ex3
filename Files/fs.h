@@ -38,13 +38,13 @@ private:
 
     //Reads from block returns 64 dir_entries and number of taken blocks
     void readDirBlock(int block, dir_entry* in, int& numbBlocks); 
-
     //Writes a block of dir_enteries to the disk
     void writeDirToDisk(int block, dir_entry* in);
-
     //Makes a block of 64 dir_entries with all dirs empty
     void makeDirBlock(dir_entry* in, int numbBlocks = 64, int startIndex = 0); 
 
+    void writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firstAdd);
+    void readFromDisk(std::string& fileText, int dirIndex, int fileIndex);
 public:
     FS();
     ~FS();

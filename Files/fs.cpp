@@ -182,3 +182,64 @@ FS::chmod(std::string accessrights, std::string filepath)
     std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
     return 0;
 }
+
+void FS::writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firstAdd)
+{
+    std::string fixedText;
+    int lastBlock, count = 0;
+    int entryIndex = dirs[dirIndex]->nrEntries;
+
+    for (int i = 2; i < BLOCK_SIZE/2; i++)
+    {
+        if (fat[i] == FAT_FREE)
+        {
+            if (!firstAdd)
+            {
+                dirs[dirIndex]->entries[entryIndex].first_blk = i;
+                fixedText = fileText.substr(4096 * count, 4096);
+                disk.write(i, (uint8_t*)fixedText.c_str());
+
+                count++;
+                firstAdd = true;
+            }
+            else
+            {
+                //Adding to new disk block if file was too big
+                fat[lastBlock] = i;
+                fixedText = fileText.substr(4096 * count, 4096);
+                disk.write(i, (uint8_t*)fixedText.c_str());
+                count++;
+            }
+
+            //Checking if file is bigger than disk block
+            fileSize -= 4096;
+
+            if (fileSize <= 0)
+            {
+                dirs[dirIndex]->nrEntries++;
+                disk.write(dirs[dirIndex]->fatIndex, (uint8_t*)dirs[dirIndex]);
+                fat[i] = FAT_EOF;
+                break;
+            }
+
+            lastBlock = i;
+        }
+    }
+}
+
+//Reads from the disk
+void FS::readFromDisk(std::string& fileText, int dirIndex, int fileIndex)
+{
+    char* buffer;
+    int lastPlace = dirs[dirIndex]->entries[fileIndex].first_blk;
+
+    while (lastPlace != FAT_EOF)
+    {
+        buffer = new char[BLOCK_SIZE];
+        disk.read(lastPlace, (uint8_t *)buffer);
+        fileText.append(buffer);
+        delete[] buffer;
+
+        lastPlace = fat[lastPlace];
+    }
+}
