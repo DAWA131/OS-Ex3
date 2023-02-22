@@ -42,7 +42,7 @@ FS::FS()
 
 FS::~FS()
 {
-
+    std::cout <<  "I made it here \n";
 }
 
 // formats the disk, i.e., creates an empty file system
@@ -97,6 +97,7 @@ FS::create(std::string filepath)
     this->workingDirectory[index].first_blk = block;
     std::cout << "Block is: " << block << "\n";
     disk.write(FAT_BLOCK, (uint8_t*)fat);
+    disk.write(ROOT_BLOCK, (uint8_t*) workingDirectory);
     return 0;
 }
 
@@ -104,7 +105,37 @@ FS::create(std::string filepath)
 int
 FS::cat(std::string filepath)
 {
-    std::cout << "FS::cat(" << filepath << ")\n";
+    bool found = false, rights = false;
+    std::string fileText;
+
+    for (int i = 0; i < numbEnteries(); i++) // DOES NOT WORK WITH HIERARCHIES!
+    {
+        if (workingDirectory[i].file_name == filepath)
+        {
+            uint8_t access = workingDirectory[i].access_rights;
+            if (access == READ || access == 0x06 || access == 0x07)
+            {
+                
+                
+            }
+
+            readFromDisk(fileText, i);
+            std::cout << fileText;
+
+            found = true;
+            rights = true;
+            break;
+        }
+    }
+
+    if (!found)
+    {
+        std::cout << "ERROR: File not found\n";
+    }
+    else if (!rights)
+    {
+        std::cout << "ERROR: You do not have access to this file\n";
+    }
     return 0;
 }
 
@@ -250,22 +281,19 @@ void FS::writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool f
 }
 
 //Reads from the disk
-void FS::readFromDisk(std::string& fileText, int dirIndex, int fileIndex)
+void FS::readFromDisk(std::string& fileText, int fileIndex)
 {
-    /*
     char* buffer;
-    int lastPlace = dirs[dirIndex]->entries[fileIndex].first_blk;
+    int lastPlace = workingDirectory[fileIndex].first_blk;
 
     while (lastPlace != FAT_EOF)
     {
         buffer = new char[BLOCK_SIZE];
-        disk.read(lastPlace, (uint8_t *)buffer);
+        disk.read(lastPlace, (uint8_t*)buffer);
         fileText.append(buffer);
         delete[] buffer;
-
         lastPlace = fat[lastPlace];
     }
-    */
 }
 
 int FS::numbEnteries()

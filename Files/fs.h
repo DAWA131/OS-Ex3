@@ -43,7 +43,7 @@ private:
     void makeDirBlock(dir_entry* in, int numbBlocks = 64, int startIndex = 0); 
 
     void writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool firstAdd);
-    void readFromDisk(std::string& fileText, int dirIndex, int fileIndex);
+    void readFromDisk(std::string& fileText, int fileIndex);
     int numbEnteries();
     int firstFreeEnterie();
 
