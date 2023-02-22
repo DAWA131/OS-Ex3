@@ -48,6 +48,8 @@ private:
     int numbEnteries();
     int firstFreeEnterie();
 
+    void getDir(std::string path, dir_entry* dir);
+
 public:
     FS();
     ~FS();
