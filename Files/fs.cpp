@@ -66,9 +66,21 @@ FS::format()
 int
 FS::create(std::string filepath)
 {
-    std::cout << "FS::create(" << filepath << ")\n";
+    if (filepath.length() > 55)
+    {
+        std::cout << "ERROR: Name too long\n";
+        return 0;
+    }
+
+    for (int i = 0; i < numbEnteries(); i++)
+    {
+        if (workingDirectory[i].file_name == filepath)
+        {
+            std::cout << "ERROR: File already exists\n";
+            return 0;
+        }
+    }
     int index = this->numbEnteries();
-    std::cout << "id: " << index << "\n";
     strcpy(this->workingDirectory[index].file_name, filepath.c_str());
     this->workingDirectory[index].type = TYPE_FILE;
     this->workingDirectory[index].access_rights = READWRITE;
@@ -96,7 +108,6 @@ FS::create(std::string filepath)
     this->writeToDisk(text, fileSize, block, true);
     this->workingDirectory[index].size = fileSize;
     this->workingDirectory[index].first_blk = block;
-    std::cout << "Block is: " << block << "\n";
     disk.write(FAT_BLOCK, (uint8_t*)fat);
     disk.write(ROOT_BLOCK, (uint8_t*) workingDirectory);
     return 0;
@@ -172,7 +183,53 @@ FS::ls()
 int
 FS::cp(std::string sourcepath, std::string destpath)
 {
-    std::cout << "FS::cp(" << sourcepath << "," << destpath << ")\n";
+    int index = -1;
+    std::string fileText;
+
+    for (int i = 0; i < numbEnteries(); i++)
+    {
+        if (workingDirectory[i].file_name == sourcepath)
+        {
+            index = i;
+        }
+
+        if (workingDirectory[i].file_name == destpath)
+        {
+            std::cout << "ERROR: File already exists\n";
+            return 0;
+        }
+    }
+
+    if (index == -1)
+    {
+        std::cout << "ERROR: Could not find file\n";
+        return 0;
+    }
+
+    //Reads in the text if you have access to the file
+    int accessRight = workingDirectory[index].access_rights;
+    if (accessRight == READ || accessRight == 0x06 || accessRight == 0x07)
+    {
+        readFromDisk(fileText, index);
+    }
+    else
+    {
+        std::cout << "ERROR: Access denied\n";
+        return 0;
+    }
+
+    //Creating the new file for workingdirectory
+    int newIndex = numbEnteries();
+    int block = -1;
+
+    strcpy(workingDirectory[newIndex].file_name, destpath.c_str());
+    workingDirectory[newIndex].size = workingDirectory[index].size;
+    workingDirectory[newIndex].type = workingDirectory[index].type;
+    workingDirectory[newIndex].access_rights = workingDirectory[index].access_rights;
+    writeToDisk(fileText, workingDirectory[newIndex].size, block, true);
+    workingDirectory[newIndex].first_blk = block;
+    
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
     return 0;
 }
 
