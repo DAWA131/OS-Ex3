@@ -67,10 +67,10 @@ int
 FS::create(std::string filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
-    int index = this->firstFreeEnterie();
+    int index = this->numbEnteries();
+    std::cout << "id: " << index << "\n";
     strcpy(this->workingDirectory[index].file_name, filepath.c_str());
     this->workingDirectory[index].type = TYPE_FILE;
-    this->workingDirectory[index].size = 10;
 
     bool done = false;
     std::string inputText;
@@ -91,7 +91,12 @@ FS::create(std::string filepath)
     }
 
     int fileSize = text.size();
-    
+    int block = -1;
+    this->writeToDisk(text, fileSize, block, true);
+    this->workingDirectory[index].size = fileSize;
+    this->workingDirectory[index].first_blk = block;
+    std::cout << "Block is: " << block << "\n";
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
     return 0;
 }
 
@@ -112,6 +117,7 @@ FS::ls()
     std::string name, type, access, size;
     uint32_t aRights;
 
+    std::cout << "number of ent: " << this->numbEnteries() << "\n";
     for (int i = 0; i < this->numbEnteries(); i++)
     {
         name = this->workingDirectory[i].file_name;
@@ -211,7 +217,7 @@ void FS::writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool f
     {
         if (fat[i] == FAT_FREE)
         {
-            if (!firstAdd)
+            if (firstAdd)
             {
                 FirstBlock = i;
                 fixedText = fileText.substr(4096 * count, 4096);
@@ -264,26 +270,27 @@ void FS::readFromDisk(std::string& fileText, int dirIndex, int fileIndex)
 
 int FS::numbEnteries()
 {
-    int numbEnteries = 0;
+    int nr = 0;
     for (int i = 0; i < 64; i++)
     {
         if(this->workingDirectory[i].type != TYPE_EMPTY)
         {
-            numbEnteries++;
+            nr++;
         }
     }
-    
-    return numbEnteries;
+
+    return nr;
 }
 
 int FS::firstFreeEnterie()
 {
-    int free = -1;
-        for (int i = 0; i < 64; i++)
+    int free = 0;
+    for (int i = 0; i < 64; i++)
     {
         if(this->workingDirectory[i].type != TYPE_EMPTY)
         {
-           return free;
+            free = i;
+            return free;
         }
     }
     return free;
