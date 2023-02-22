@@ -12,7 +12,6 @@ void FS::readDirBlock(int block, dir_entry *in, int& numbBlocks)
             numbBlocks++;
         }
     }
-    
 }
 
 void FS::writeDirToDisk(int block, dir_entry *in)
@@ -26,7 +25,6 @@ void FS::makeDirBlock(dir_entry *in, int numbBlocks, int startIndex)
     {
         in[i].type = TYPE_EMPTY;
     }
-    this->numbEnteries = 0;
 }
 
 FS::FS()
@@ -69,10 +67,31 @@ int
 FS::create(std::string filepath)
 {
     std::cout << "FS::create(" << filepath << ")\n";
-    strcpy(this->workingDirectory[this->numbEnteries].file_name, filepath.c_str());
-    this->workingDirectory[this->numbEnteries].type = TYPE_FILE;
-    this->workingDirectory[this->numbEnteries].size = 10;
-    this->numbEnteries++;
+    int index = this->firstFreeEnterie();
+    strcpy(this->workingDirectory[index].file_name, filepath.c_str());
+    this->workingDirectory[index].type = TYPE_FILE;
+    this->workingDirectory[index].size = 10;
+
+    bool done = false;
+    std::string inputText;
+    std::string text;
+
+    while (!done)
+    {
+        std::getline(std::cin, inputText);
+        if (inputText == "")
+        {
+            done = true;
+        }
+        else
+        {
+            inputText += '\n';
+            text.append(inputText);
+        }
+    }
+
+    int fileSize = text.size();
+    
     return 0;
 }
 
@@ -93,7 +112,7 @@ FS::ls()
     std::string name, type, access, size;
     uint32_t aRights;
 
-    for (int i = 0; i < this->numbEnteries; i++)
+    for (int i = 0; i < this->numbEnteries(); i++)
     {
         name = this->workingDirectory[i].file_name;
         size = std::to_string(this->workingDirectory[i].size);
@@ -183,11 +202,10 @@ FS::chmod(std::string accessrights, std::string filepath)
     return 0;
 }
 
-void FS::writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firstAdd)
+void FS::writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool firstAdd)
 {
     std::string fixedText;
     int lastBlock, count = 0;
-    int entryIndex = dirs[dirIndex]->nrEntries;
 
     for (int i = 2; i < BLOCK_SIZE/2; i++)
     {
@@ -195,7 +213,7 @@ void FS::writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firs
         {
             if (!firstAdd)
             {
-                dirs[dirIndex]->entries[entryIndex].first_blk = i;
+                FirstBlock = i;
                 fixedText = fileText.substr(4096 * count, 4096);
                 disk.write(i, (uint8_t*)fixedText.c_str());
 
@@ -216,8 +234,6 @@ void FS::writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firs
 
             if (fileSize <= 0)
             {
-                dirs[dirIndex]->nrEntries++;
-                disk.write(dirs[dirIndex]->fatIndex, (uint8_t*)dirs[dirIndex]);
                 fat[i] = FAT_EOF;
                 break;
             }
@@ -230,6 +246,7 @@ void FS::writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firs
 //Reads from the disk
 void FS::readFromDisk(std::string& fileText, int dirIndex, int fileIndex)
 {
+    /*
     char* buffer;
     int lastPlace = dirs[dirIndex]->entries[fileIndex].first_blk;
 
@@ -242,4 +259,32 @@ void FS::readFromDisk(std::string& fileText, int dirIndex, int fileIndex)
 
         lastPlace = fat[lastPlace];
     }
+    */
+}
+
+int FS::numbEnteries()
+{
+    int numbEnteries = 0;
+    for (int i = 0; i < 64; i++)
+    {
+        if(this->workingDirectory[i].type != TYPE_EMPTY)
+        {
+            numbEnteries++;
+        }
+    }
+    
+    return numbEnteries;
+}
+
+int FS::firstFreeEnterie()
+{
+    int free = -1;
+        for (int i = 0; i < 64; i++)
+    {
+        if(this->workingDirectory[i].type != TYPE_EMPTY)
+        {
+           return free;
+        }
+    }
+    return free;
 }

@@ -29,7 +29,6 @@ struct dir_entry {
 
 class FS {
 private:
-    int numbEnteries;
     dir_entry workingDirectory[64];
     
     Disk disk;
@@ -43,8 +42,11 @@ private:
     //Makes a block of 64 dir_entries with all dirs empty
     void makeDirBlock(dir_entry* in, int numbBlocks = 64, int startIndex = 0); 
 
-    void writeToDisk(std::string fileText, int dirIndex, int fileSize, bool firstAdd);
+    void writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool firstAdd);
     void readFromDisk(std::string& fileText, int dirIndex, int fileIndex);
+    int numbEnteries();
+    int firstFreeEnterie();
+
 public:
     FS();
     ~FS();
