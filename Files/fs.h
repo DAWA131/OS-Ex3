@@ -18,6 +18,7 @@
 #define READ 0x04
 #define WRITE 0x02
 #define EXECUTE 0x01
+#define READWRITE 0x06
 
 struct dir_entry {
     char file_name[56]; // name of the file / sub-directory

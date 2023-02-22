@@ -71,6 +71,7 @@ FS::create(std::string filepath)
     std::cout << "id: " << index << "\n";
     strcpy(this->workingDirectory[index].file_name, filepath.c_str());
     this->workingDirectory[index].type = TYPE_FILE;
+    this->workingDirectory[index].access_rights = READWRITE;
 
     bool done = false;
     std::string inputText;
@@ -113,17 +114,14 @@ FS::cat(std::string filepath)
         if (workingDirectory[i].file_name == filepath)
         {
             uint8_t access = workingDirectory[i].access_rights;
-            if (access == READ || access == 0x06 || access == 0x07)
+            if (access == READ || access == READWRITE || access == 0x07)
             {
-                
-                
+                rights = true;
+                readFromDisk(fileText, i);
+                std::cout << fileText;
             }
 
-            readFromDisk(fileText, i);
-            std::cout << fileText;
-
             found = true;
-            rights = true;
             break;
         }
     }
