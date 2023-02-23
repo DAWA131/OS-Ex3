@@ -65,25 +65,30 @@ FS::format()
 int
 FS::create(std::string filepath)
 {
-    if (filepath.length() > 55)
+    std::string name = this->getFile(filepath);
+    if (name.length() > 55)
     {
         std::cout << "ERROR: Name too long\n";
         return 0;
     }
     dir_entry dir[64];
-    //this->getDirectory(filepath, dir);
-    for (int i = 0; i < numbEnteries(this->workingDirectory); i++)
+    int dirFatId;
+    if(this->getDirectory(filepath, dir, dirFatId) == -1)
     {
-        if (dir[i].file_name == filepath)
+        return 0;
+    }
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == name)
         {
             std::cout << "ERROR: File already exists\n";
             return 0;
         }
     }
-    int index = this->numbEnteries(this->workingDirectory);
-    strcpy(this->workingDirectory[index].file_name, filepath.c_str());
-    this->workingDirectory[index].type = TYPE_FILE;
-    this->workingDirectory[index].access_rights = READWRITE;
+    int index = this->numbEnteries(dir);
+    strcpy(dir[index].file_name, name.c_str());
+    dir[index].type = TYPE_FILE;
+    dir[index].access_rights = READWRITE;
 
     bool done = false;
     std::string inputText;
@@ -106,10 +111,16 @@ FS::create(std::string filepath)
     int fileSize = text.size();
     int block = -1;
     this->writeToDisk(text, fileSize, block, true);
-    this->workingDirectory[index].size = fileSize;
-    this->workingDirectory[index].first_blk = block;
+    dir[index].size = fileSize;
+    dir[index].first_blk = block;
     disk.write(FAT_BLOCK, (uint8_t*)fat);
-    disk.write(ROOT_BLOCK, (uint8_t*) workingDirectory);
+    std::cout << "fat id: " << dirFatId << "\n";
+    disk.write(dirFatId, (uint8_t*) dir);
+    if(currentBlock == dirFatId)
+    {
+        std::cout << "updated wd\n";
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
@@ -502,15 +513,25 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
         directories.push_back(directory);
     }
 
+    dir_entry dirs[64];
+    for (int i = 0; i < 64; i++)
+    {
+        dirs[i] = workingDirectory[i];
+        newBlock = this->currentBlock;
+    }
 
     //If the file is in the same directory
     if (directories.size() == 0)
     {
-        dir = workingDirectory;
+        std::cout << "sending back wd\n";
+    for (int i = 0; i < 64; i++)
+        {
+            dir[i] = workingDirectory[i];
+            newBlock = this->currentBlock;
+        }
         return 1;
     }
 
-    dir_entry* dirs = this->workingDirectory;
     bool found = false;
     int count = this->numbEnteries(this->workingDirectory);
     for (int i = 0; i < directories.size(); i++)

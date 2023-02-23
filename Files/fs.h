@@ -50,7 +50,7 @@ private:
     int numbEnteries(dir_entry* dir);
     int firstFreeEnterie();
 
-    int getDirectory(std::string path, dir_entry* dir, int& newBlock ,bool cd = false);
+    int getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd = false);
     std::string getFile(std::string path);
 
 
