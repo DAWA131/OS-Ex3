@@ -330,8 +330,9 @@ int
 FS::cd(std::string dirpath)
 {
     dir_entry dir[64];
-    if(this->getDirectory(dirpath, dir, this->currentBlock,true) == -1)
+    if(this->getDirectory(dirpath, dir, this->currentBlock, true) == -1)
     {
+        std::cout << "ERROR: no directory found\n";
         return 0;
     }
     for (int i = 0; i < 64; i++)
@@ -346,7 +347,50 @@ FS::cd(std::string dirpath)
 int
 FS::pwd()
 {
-    std::cout << "FS::pwd()\n";
+    bool inRoot = false;
+    int lastDirFatId, newDirFatId = this->currentBlock;
+    std::vector<std::string> path;
+    dir_entry dir[64];
+    for (int i = 0; i < 64; i++)
+    {
+        dir[i] = this->workingDirectory[i];
+    }
+    std::string look = "..";
+    while(!inRoot)
+    {
+        if(this->getDirectory(look, dir, lastDirFatId, true) == -1)
+        {
+            inRoot = true;
+        } 
+        else
+        {
+            for (int i = 0; i < 64; i++)
+            {
+                if(dir[i].first_blk == (uint16_t)newDirFatId)
+                {
+                    path.push_back(dir[i].file_name);
+                    newDirFatId = lastDirFatId;
+                    look.append("/..");
+                    i = 100;
+                }
+            }
+        }
+    }
+
+    for (int i = path.size(); i > 0;)
+    {
+        i--;
+        std::cout << "/" << path[i];
+    }
+    if(path.size() > 0)
+    {
+        std::cout << "\n";
+    }
+    else
+    {
+        std::cout << "/\n";
+    }
+
     return 0;
 }
 
@@ -552,7 +596,6 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
         }
         if (!found)
         {
-            std::cout << "ERROR: No dir found\n";
             return-1;
         }
     }
