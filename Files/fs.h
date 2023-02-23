@@ -3,6 +3,7 @@
 #include <cstring>
 #include <vector>
 #include "disk.h"
+#include "string"
 
 #ifndef __FS_H__
 #define __FS_H__
@@ -31,6 +32,7 @@ struct dir_entry {
 class FS {
 private:
     dir_entry workingDirectory[64];
+    int currentBlock = 0;
     
     Disk disk;
     // size of a FAT entry is 2 bytes
@@ -48,7 +50,9 @@ private:
     int numbEnteries();
     int firstFreeEnterie();
 
-    void getDir(std::string path, dir_entry* dir);
+    int getDirectory(std::string path, dir_entry* dir);
+    std::string getFile(std::string path);
+
 
 public:
     FS();

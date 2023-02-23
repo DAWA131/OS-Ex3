@@ -152,14 +152,20 @@ FS::cat(std::string filepath)
 int
 FS::ls()
 {
-    std::cout << "FS::ls()\n";
+    int numb = this->numbEnteries();
+    std::cout << "WD has: " << numb << " number of enteries\n";
     std::cout << "Name\tType\tAccess\tSize\n";
     std::string name, type, access, size;
     uint32_t aRights;
 
-    std::cout << "number of ent: " << this->numbEnteries() << "\n";
-    for (int i = 0; i < this->numbEnteries(); i++)
+    for (int i = 0; i < numb; i++)
     {
+        if (this->workingDirectory[i].type == TYPE_EMPTY)
+        {
+            std::cout << "ah shit here we go again\n";
+            continue;
+        }
+        
         name = this->workingDirectory[i].file_name;
         size = std::to_string(this->workingDirectory[i].size);
         aRights = this->workingDirectory[i].access_rights;
@@ -264,7 +270,52 @@ FS::append(std::string filepath1, std::string filepath2)
 int
 FS::mkdir(std::string dirpath)
 {
-    std::cout << "FS::mkdir(" << dirpath << ")\n";
+    std::string name = this->getFile(dirpath);
+    int num = this->numbEnteries();
+    if(num > 64)
+    {
+        std::cout << "ERROR: Directory full\n";
+        return 0;
+    }
+    for (int i = 0; i < num; i++)
+    {
+        if(workingDirectory[i].file_name == name.c_str())
+        {
+            std::cout << "ERROR: Name exists\n";
+            return 0;
+        }
+    }
+    
+    this->workingDirectory[num].type = TYPE_DIR;
+    this->workingDirectory[num].access_rights = READWRITE;
+    strcpy(this->workingDirectory[num].file_name, name.c_str());
+
+    int freeFat = -1;
+    for (int i = 2; i < BLOCK_SIZE/2; i++)
+    {
+        if(fat[i] == FAT_FREE)
+        {
+            freeFat = i;
+            break;
+        }
+    }
+
+    std::cout << "The fat block is: " << freeFat << "\n";
+    
+    dir_entry folder[64];
+    this->makeDirBlock(folder);
+    this->workingDirectory[num].first_blk = freeFat;
+    folder[0].type = TYPE_DIR;
+    folder[0].first_blk = this->currentBlock;
+    std::string nname = "..";
+    strcpy(folder[0].file_name, nname.c_str());
+    for (int i = 0; i < 64; i++)
+    {
+      //  std::cout << "spot: " << i << " has: " << (int)folder[i].type << "\n";
+    }
+    
+    this->writeDirToDisk(freeFat, folder);
+    this->writeDirToDisk(ROOT_BLOCK, this->workingDirectory);
     return 0;
 }
 
@@ -272,7 +323,15 @@ FS::mkdir(std::string dirpath)
 int
 FS::cd(std::string dirpath)
 {
-    std::cout << "FS::cd(" << dirpath << ")\n";
+    dir_entry dir[64];
+    if(this->getDirectory(dirpath, dir) == -1)
+    {
+        return 0;
+    }
+    for (int i = 0; i < 64; i++)
+    {
+        this->workingDirectory[i] = dir[i];
+    }
     return 0;
 }
 
@@ -361,7 +420,6 @@ int FS::numbEnteries()
             nr++;
         }
     }
-
     return nr;
 }
 
@@ -377,4 +435,103 @@ int FS::firstFreeEnterie()
         }
     }
     return free;
+}
+
+std::string FS::getFile(std::string path)
+{
+    //Only looking for the filename
+    char text[path.size()];
+    strcpy(text, path.c_str());
+    std::vector <std::string> directories;
+    std::string directory;
+
+    if (path.size() == 1 && path[0] == '/')
+    {
+        directory = path[0];
+        return directory;
+    }
+
+    for (int i = 0; i < path.size(); i++)
+    {
+        if (i == 0 && text[i] == '/')
+        {
+            continue;
+        }
+        else if (i > 0 && text[i] == '/')
+        {
+            directories.push_back(directory);
+            directory = "";
+        }
+        else
+        {
+            directory += text[i];
+        }
+    }
+
+    directories.push_back(directory);
+    directory = directories[directories.size() - 1];
+    return directory;
+}
+
+int FS::getDirectory(std::string path, dir_entry* dir)
+{
+    //Dividing the path into strings
+    char text[path.size()];
+    strcpy(text, path.c_str());
+    std::vector <std::string> directories;
+    std::string directory;
+
+    for (int i = 0; i < path.size(); i++)
+    {
+        if (i == 0 && text[i] == '/')
+        {
+            directory = text[i];
+            directories.push_back(directory);
+            directory = "";
+        }
+        else if (i > 0 && text[i] == '/')
+        {
+            directories.push_back(directory);
+            directory = "";
+        }
+        else
+        {
+            directory += text[i];
+        }
+    }
+    directories.push_back(directory);
+
+
+    //If the file is in the same directory
+    if (directories.size() == 0)
+    {
+        dir = workingDirectory;
+        return 1;
+    }
+
+    dir_entry* dirs = this->workingDirectory;
+    bool found = false;
+    int count = this->numbEnteries();
+    for (int i = 0; i < directories.size(); i++)
+    {
+        found = false;
+        for (int j = 0; j < count; j++)
+        {
+            if(strcmp(dirs[j].file_name, directories[i].c_str()) == 0 && dirs[j].type == TYPE_DIR)
+            {
+                std::cout << "moving to block: " << dirs[j].first_blk << "\n";
+                disk.read(dirs[j].first_blk, (uint8_t*)dir);
+                found = true;
+                count = numbEnteries();
+                std::cout << "new nr is: " << count << "\n";
+                break;
+            }
+        }
+        if (!found)
+        {
+            std::cout << "ERROR: No dir found\n";
+            return-1;
+        }
+    }
+    return 1;
 }
