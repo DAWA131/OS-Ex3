@@ -114,11 +114,9 @@ FS::create(std::string filepath)
     dir[index].size = fileSize;
     dir[index].first_blk = block;
     disk.write(FAT_BLOCK, (uint8_t*)fat);
-    std::cout << "fat id: " << dirFatId << "\n";
     disk.write(dirFatId, (uint8_t*) dir);
     if(currentBlock == dirFatId)
     {
-        std::cout << "updated wd\n";
         disk.read(currentBlock, (uint8_t*)this->workingDirectory);
     }
     return 0;
@@ -523,8 +521,7 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
     //If the file is in the same directory
     if (directories.size() == 0)
     {
-        std::cout << "sending back wd\n";
-    for (int i = 0; i < 64; i++)
+        for (int i = 0; i < 64; i++)
         {
             dir[i] = workingDirectory[i];
             newBlock = this->currentBlock;
