@@ -42,7 +42,6 @@ FS::FS()
 
 FS::~FS()
 {
-    std::cout <<  "I made it here \n";
 }
 
 // formats the disk, i.e., creates an empty file system
@@ -71,16 +70,17 @@ FS::create(std::string filepath)
         std::cout << "ERROR: Name too long\n";
         return 0;
     }
-
-    for (int i = 0; i < numbEnteries(); i++)
+    dir_entry dir[64];
+    //this->getDirectory(filepath, dir);
+    for (int i = 0; i < numbEnteries(this->workingDirectory); i++)
     {
-        if (workingDirectory[i].file_name == filepath)
+        if (dir[i].file_name == filepath)
         {
             std::cout << "ERROR: File already exists\n";
             return 0;
         }
     }
-    int index = this->numbEnteries();
+    int index = this->numbEnteries(this->workingDirectory);
     strcpy(this->workingDirectory[index].file_name, filepath.c_str());
     this->workingDirectory[index].type = TYPE_FILE;
     this->workingDirectory[index].access_rights = READWRITE;
@@ -120,7 +120,7 @@ FS::cat(std::string filepath)
     bool found = false, rights = false;
     std::string fileText;
 
-    for (int i = 0; i < numbEnteries(); i++) // DOES NOT WORK WITH HIERARCHIES!
+    for (int i = 0; i < numbEnteries(this->workingDirectory); i++) // DOES NOT WORK WITH HIERARCHIES!
     {
         if (workingDirectory[i].file_name == filepath)
         {
@@ -152,17 +152,15 @@ FS::cat(std::string filepath)
 int
 FS::ls()
 {
-    int numb = this->numbEnteries();
-    std::cout << "WD has: " << numb << " number of enteries\n";
     std::cout << "Name\tType\tAccess\tSize\n";
     std::string name, type, access, size;
     uint32_t aRights;
 
+    int numb = this->numbEnteries(this->workingDirectory);
     for (int i = 0; i < numb; i++)
     {
         if (this->workingDirectory[i].type == TYPE_EMPTY)
         {
-            std::cout << "ah shit here we go again\n";
             continue;
         }
         
@@ -192,7 +190,7 @@ FS::cp(std::string sourcepath, std::string destpath)
     int index = -1;
     std::string fileText;
 
-    for (int i = 0; i < numbEnteries(); i++)
+    for (int i = 0; i < numbEnteries(this->workingDirectory); i++)
     {
         if (workingDirectory[i].file_name == sourcepath)
         {
@@ -225,7 +223,7 @@ FS::cp(std::string sourcepath, std::string destpath)
     }
 
     //Creating the new file for workingdirectory
-    int newIndex = numbEnteries();
+    int newIndex = numbEnteries(this->workingDirectory);
     int block = -1;
 
     strcpy(workingDirectory[newIndex].file_name, destpath.c_str());
@@ -271,7 +269,7 @@ int
 FS::mkdir(std::string dirpath)
 {
     std::string name = this->getFile(dirpath);
-    int num = this->numbEnteries();
+    int num = this->numbEnteries(this->workingDirectory);
     if(num > 64)
     {
         std::cout << "ERROR: Directory full\n";
@@ -300,8 +298,7 @@ FS::mkdir(std::string dirpath)
         }
     }
 
-    std::cout << "The fat block is: " << freeFat << "\n";
-    
+    fat[freeFat] = FAT_EOF;
     dir_entry folder[64];
     this->makeDirBlock(folder);
     this->workingDirectory[num].first_blk = freeFat;
@@ -309,13 +306,13 @@ FS::mkdir(std::string dirpath)
     folder[0].first_blk = this->currentBlock;
     std::string nname = "..";
     strcpy(folder[0].file_name, nname.c_str());
-    for (int i = 0; i < 64; i++)
-    {
-      //  std::cout << "spot: " << i << " has: " << (int)folder[i].type << "\n";
-    }
-    
+
     this->writeDirToDisk(freeFat, folder);
-    this->writeDirToDisk(ROOT_BLOCK, this->workingDirectory);
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
+    this->writeDirToDisk(this->currentBlock, this->workingDirectory);
+    dir_entry test[64];
+    int np;
+    this->readDirBlock(freeFat, test, np);
     return 0;
 }
 
@@ -324,7 +321,7 @@ int
 FS::cd(std::string dirpath)
 {
     dir_entry dir[64];
-    if(this->getDirectory(dirpath, dir) == -1)
+    if(this->getDirectory(dirpath, dir, this->currentBlock,true) == -1)
     {
         return 0;
     }
@@ -410,12 +407,12 @@ void FS::readFromDisk(std::string& fileText, int fileIndex)
     }
 }
 
-int FS::numbEnteries()
+int FS::numbEnteries(dir_entry* dir)
 {
     int nr = 0;
     for (int i = 0; i < 64; i++)
     {
-        if(this->workingDirectory[i].type != TYPE_EMPTY)
+        if(dir[i].type != TYPE_EMPTY)
         {
             nr++;
         }
@@ -473,7 +470,7 @@ std::string FS::getFile(std::string path)
     return directory;
 }
 
-int FS::getDirectory(std::string path, dir_entry* dir)
+int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
 {
     //Dividing the path into strings
     char text[path.size()];
@@ -499,7 +496,11 @@ int FS::getDirectory(std::string path, dir_entry* dir)
             directory += text[i];
         }
     }
-    directories.push_back(directory);
+
+    if(cd)
+    { 
+        directories.push_back(directory);
+    }
 
 
     //If the file is in the same directory
@@ -511,7 +512,7 @@ int FS::getDirectory(std::string path, dir_entry* dir)
 
     dir_entry* dirs = this->workingDirectory;
     bool found = false;
-    int count = this->numbEnteries();
+    int count = this->numbEnteries(this->workingDirectory);
     for (int i = 0; i < directories.size(); i++)
     {
         found = false;
@@ -519,11 +520,15 @@ int FS::getDirectory(std::string path, dir_entry* dir)
         {
             if(strcmp(dirs[j].file_name, directories[i].c_str()) == 0 && dirs[j].type == TYPE_DIR)
             {
-                std::cout << "moving to block: " << dirs[j].first_blk << "\n";
-                disk.read(dirs[j].first_blk, (uint8_t*)dir);
+                newBlock = dirs[j].first_blk;
+                disk.read(dirs[j].first_blk, (uint8_t*)dirs);
+                for (int i = 0; i < 64; i++)
+                {
+                    dir[i] = dirs[i];
+                }
+                
                 found = true;
-                count = numbEnteries();
-                std::cout << "new nr is: " << count << "\n";
+                count = 64;
                 break;
             }
         }
