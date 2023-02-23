@@ -75,6 +75,7 @@ FS::create(std::string filepath)
     int dirFatId;
     if(this->getDirectory(filepath, dir, dirFatId) == -1)
     {
+        std::cout << "ERROR: No dir found\n";
         return 0;
     }
     for (int i = 0; i < numbEnteries(dir); i++)
@@ -278,7 +279,15 @@ int
 FS::mkdir(std::string dirpath)
 {
     std::string name = this->getFile(dirpath);
-    int num = this->numbEnteries(this->workingDirectory);
+    dir_entry dir[64];
+    int dirFatId;
+    if(this->getDirectory(dirpath, dir, dirFatId) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+
+    int num = this->numbEnteries(dir);
     if(num > 64)
     {
         std::cout << "ERROR: Directory full\n";
@@ -286,16 +295,16 @@ FS::mkdir(std::string dirpath)
     }
     for (int i = 0; i < num; i++)
     {
-        if(workingDirectory[i].file_name == name.c_str())
+        if(dir[i].file_name == name.c_str())
         {
             std::cout << "ERROR: Name exists\n";
             return 0;
         }
     }
     
-    this->workingDirectory[num].type = TYPE_DIR;
-    this->workingDirectory[num].access_rights = READWRITE;
-    strcpy(this->workingDirectory[num].file_name, name.c_str());
+    dir[num].type = TYPE_DIR;
+    dir[num].access_rights = READWRITE;
+    strcpy(dir[num].file_name, name.c_str());
 
     int freeFat = -1;
     for (int i = 2; i < BLOCK_SIZE/2; i++)
@@ -310,18 +319,22 @@ FS::mkdir(std::string dirpath)
     fat[freeFat] = FAT_EOF;
     dir_entry folder[64];
     this->makeDirBlock(folder);
-    this->workingDirectory[num].first_blk = freeFat;
+    dir[num].first_blk = freeFat;
     folder[0].type = TYPE_DIR;
-    folder[0].first_blk = this->currentBlock;
+    folder[0].first_blk = dirFatId;
     std::string nname = "..";
     strcpy(folder[0].file_name, nname.c_str());
 
     this->writeDirToDisk(freeFat, folder);
     disk.write(FAT_BLOCK, (uint8_t*)fat);
-    this->writeDirToDisk(this->currentBlock, this->workingDirectory);
+    this->writeDirToDisk(dirFatId, dir);
     dir_entry test[64];
     int np;
     this->readDirBlock(freeFat, test, np);
+    if(currentBlock == dirFatId)
+    {
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
