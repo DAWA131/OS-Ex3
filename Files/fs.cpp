@@ -32,11 +32,15 @@ FS::FS()
     std::cout << "FS::FS()... Creating file system\n";
     disk.read(FAT_BLOCK, (uint8_t*)fat);
 
-    if(fat[ROOT_BLOCK] != FAT_EOF || true) // no saved FS so make a new start
+    if(fat[ROOT_BLOCK] != FAT_EOF) // no saved FS so make a new start
     {
         makeDirBlock(this->workingDirectory);
         writeDirToDisk(ROOT_BLOCK, this->workingDirectory);
         this->format();
+    }
+    else
+    {
+        disk.read(ROOT_BLOCK, (uint8_t*)this->workingDirectory);
     }
 }
 
@@ -65,6 +69,11 @@ FS::format()
 int
 FS::create(std::string filepath)
 {
+    if(this->numbEnteries(this->workingDirectory) > 63)
+    {
+        std::cout << "ERROR: dir is full\n";
+        return 0;
+    }
     std::string name = this->getFile(filepath);
     if (name.length() > 55)
     {
@@ -278,6 +287,11 @@ FS::append(std::string filepath1, std::string filepath2)
 int
 FS::mkdir(std::string dirpath)
 {
+    if(this->numbEnteries(this->workingDirectory) > 63)
+    {
+        std::cout << "ERROR: dir is full\n";
+        return 0;
+    }
     std::string name = this->getFile(dirpath);
     dir_entry dir[64];
     int dirFatId;
