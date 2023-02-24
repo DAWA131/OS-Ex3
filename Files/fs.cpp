@@ -195,6 +195,33 @@ FS::ls()
             type = "Dir";
             size = "-";
         }
+        
+        switch (aRights)
+        {
+            case READ:
+            access = "r--";
+            break;
+
+            case WRITE:
+            access = "-w-";
+            break;
+
+            case EXECUTE:
+            access = "--x";
+            break;
+
+            case 0x05:
+            access = "r-x";
+            break;
+
+            case 0x06:
+            access = "rw-";
+            break;
+
+            case 0x07:
+            access = "rwx";
+            break;
+        }
         std::cout << name << "\t" << type << "\t" << access << "\t" << size << "\n";
     }
 
@@ -426,7 +453,28 @@ FS::pwd()
 int
 FS::chmod(std::string accessrights, std::string filepath)
 {
-    std::cout << "FS::chmod(" << accessrights << "," << filepath << ")\n";
+    std::string name = this->getFile(filepath);
+    dir_entry dir[64];
+    int dirFatId;
+    if(this->getDirectory(filepath, dir, dirFatId) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    for (int i = 0; i < 64; i++)
+    {
+        if(strcmp(dir[i].file_name, name.c_str()) == 0)
+        {
+            dir[i].access_rights = stoi(accessrights);
+            disk.write(dirFatId, (uint8_t*)dir);
+            if(currentBlock == dirFatId)
+            {
+                disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+            }
+            return 0;
+        }
+    }
+    std::cout << "ERROR: No file found\n";
     return 0;
 }
 
