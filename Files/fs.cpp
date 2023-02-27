@@ -932,20 +932,6 @@ int FS::numbEnteries(dir_entry* dir)
     return nr;
 }
 
-int FS::firstFreeEnterie()
-{
-    int free = 0;
-    for (int i = 0; i < 64; i++)
-    {
-        if(this->workingDirectory[i].type != TYPE_EMPTY)
-        {
-            free = i;
-            return free;
-        }
-    }
-    return free;
-}
-
 std::string FS::getFile(std::string path)
 {
     //Only looking for the filename

@@ -48,11 +48,9 @@ private:
     void writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool firstAdd);
     void readFromDisk(std::string& fileText, int fileIndex, dir_entry* dir);
     int numbEnteries(dir_entry* dir);
-    int firstFreeEnterie();
 
     int getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd = false);
     std::string getFile(std::string path);
-
 
 public:
     FS();
