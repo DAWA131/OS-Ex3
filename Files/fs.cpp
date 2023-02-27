@@ -29,7 +29,6 @@ void FS::makeDirBlock(dir_entry *in, int numbBlocks, int startIndex)
 
 FS::FS()
 {
-    std::cout << "FS::FS()... Creating file system\n";
     disk.read(FAT_BLOCK, (uint8_t*)fat);
 
     if(fat[ROOT_BLOCK] != FAT_EOF) // no saved FS so make a new start
@@ -52,7 +51,10 @@ FS::~FS()
 int
 FS::format()
 {
-    std::cout << "FS::format()\n";
+    disk.read(ROOT_BLOCK, (uint8_t*)this->workingDirectory);
+    this->currentBlock = ROOT_BLOCK;
+    this->makeDirBlock(this->workingDirectory);
+    disk.write(ROOT_BLOCK, (uint8_t*)this->workingDirectory);
     for (int i = 2; i < BLOCK_SIZE/2; i++)
     {
         fat[i] = FAT_FREE;
@@ -82,7 +84,7 @@ FS::create(std::string filepath)
     }
     dir_entry dir[64];
     int dirFatId;
-    if(this->getDirectory(filepath, dir, dirFatId) == -1)
+    if(this->getDirectory(filepath, dir, dirFatId, false) == -1)
     {
         std::cout << "ERROR: No dir found\n";
         return 0;
@@ -137,17 +139,31 @@ int
 FS::cat(std::string filepath)
 {
     bool found = false, rights = false;
-    std::string fileText;
-
-    for (int i = 0; i < numbEnteries(this->workingDirectory); i++) // DOES NOT WORK WITH HIERARCHIES!
+    std::string fileText, file;
+    dir_entry dir[64];
+    int dirFatId;
+    if(this->getDirectory(filepath, dir, dirFatId, false) == -1)
     {
-        if (workingDirectory[i].file_name == filepath)
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    file = getFile(filepath);
+
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == file)
         {
-            uint8_t access = workingDirectory[i].access_rights;
+            if (dir[i].type == TYPE_DIR)
+            {
+                std::cout << "ERROR: Can't be a directory\n";
+                return 0;
+            }
+
+            uint8_t access = dir[i].access_rights;
             if (access == READ || access == READWRITE || access == 0x07)
             {
                 rights = true;
-                readFromDisk(fileText, i);
+                readFromDisk(fileText, i, dir);
                 std::cout << fileText;
             }
 
@@ -176,7 +192,7 @@ FS::ls()
     uint32_t aRights;
 
     int numb = this->numbEnteries(this->workingDirectory);
-    for (int i = 0; i < numb; i++)
+    for (int i = 0; i < 64; i++)
     {
         if (this->workingDirectory[i].type == TYPE_EMPTY)
         {
@@ -233,20 +249,37 @@ FS::ls()
 int
 FS::cp(std::string sourcepath, std::string destpath)
 {
-    int index = -1;
-    std::string fileText;
-
-    for (int i = 0; i < numbEnteries(this->workingDirectory); i++)
+    dir_entry dir[64];
+    dir_entry destDir[64];
+    int dirFatId;
+    if(this->getDirectory(sourcepath, dir, dirFatId, false) == -1)
     {
-        if (workingDirectory[i].file_name == sourcepath)
-        {
-            index = i;
-        }
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string file = getFile(sourcepath);
 
-        if (workingDirectory[i].file_name == destpath)
+    if(this->getDirectory(destpath, destDir, dirFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string destFile = getFile(destpath);
+
+    //Making sure the first file exists
+    int index = -1;
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == file)
         {
-            std::cout << "ERROR: File already exists\n";
-            return 0;
+            if (dir[i].type == TYPE_DIR)
+            {
+                std::cout << "ERROR: The first needs to be a file\n";
+                return 0;
+            }
+
+            index = i;
+            break;
         }
     }
 
@@ -256,11 +289,45 @@ FS::cp(std::string sourcepath, std::string destpath)
         return 0;
     }
 
+    //Seeing if the destination is a file or directory
+    bool directory = false;
+
+    for (int i = 0; i < numbEnteries(destDir); i++)
+    {
+        if (destDir[i].file_name == destFile)
+        {
+            if (destDir[i].type == TYPE_FILE)
+            {
+                std::cout << "ERROR: File already exists\n";
+                return 0;
+            }
+            else if (destDir[i].type == TYPE_DIR)
+            {
+                getDirectory(destpath, destDir, dirFatId, true);
+                directory = true;
+                break;
+            }   
+        }
+    }
+
+    if (directory)
+    {
+        for (int i = 0; i < numbEnteries(destDir); i++)
+        {
+            if (destDir[i].file_name == file)
+            {
+                std::cout << "ERROR: File already exists\n";
+                return 0;
+            }
+        }
+    }
+
     //Reads in the text if you have access to the file
-    int accessRight = workingDirectory[index].access_rights;
+    std::string fileText;
+    int accessRight = dir[index].access_rights;
     if (accessRight == READ || accessRight == 0x06 || accessRight == 0x07)
     {
-        readFromDisk(fileText, index);
+        readFromDisk(fileText, index, dir);
     }
     else
     {
@@ -269,17 +336,26 @@ FS::cp(std::string sourcepath, std::string destpath)
     }
 
     //Creating the new file for workingdirectory
-    int newIndex = numbEnteries(this->workingDirectory);
+    int newIndex = numbEnteries(destDir);
     int block = -1;
+    std::string name;
 
-    strcpy(workingDirectory[newIndex].file_name, destpath.c_str());
-    workingDirectory[newIndex].size = workingDirectory[index].size;
-    workingDirectory[newIndex].type = workingDirectory[index].type;
-    workingDirectory[newIndex].access_rights = workingDirectory[index].access_rights;
-    writeToDisk(fileText, workingDirectory[newIndex].size, block, true);
-    workingDirectory[newIndex].first_blk = block;
-    
+    if (directory) name = file;
+    else name = destFile;
+
+    strcpy(destDir[newIndex].file_name, name.c_str());
+    destDir[newIndex].size = dir[index].size;
+    destDir[newIndex].type = dir[index].type;
+    destDir[newIndex].access_rights = dir[index].access_rights;
+    writeToDisk(fileText, destDir[newIndex].size, block, true);
+    destDir[newIndex].first_blk = block;
+
+    disk.write(dirFatId, (uint8_t*)destDir);
     disk.write(FAT_BLOCK, (uint8_t*)fat);
+    if ( currentBlock == dirFatId)
+    {
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
@@ -288,7 +364,131 @@ FS::cp(std::string sourcepath, std::string destpath)
 int
 FS::mv(std::string sourcepath, std::string destpath)
 {
-    std::cout << "FS::mv(" << sourcepath << "," << destpath << ")\n";
+    dir_entry dir[64];
+    dir_entry destDir[64];
+    int dirFatId, destFatId;
+    if(this->getDirectory(sourcepath, dir, dirFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string file = getFile(sourcepath);
+
+    if(this->getDirectory(destpath, destDir, destFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string destFile = getFile(destpath);
+
+    //Making sure the first file exists
+    int index = -1;
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == file)
+        {
+            if (dir[i].type == TYPE_DIR)
+            {
+                std::cout << "ERROR: The first needs to be a file\n";
+                return 0;
+            }
+            
+            index = i;
+            break;
+        }
+    }
+
+    if (index == -1)
+    {
+        std::cout << "ERROR: Could not find file\n";
+        return 0;
+    }
+
+    //Seeing if the destination is a file or directory
+    bool directory = false;
+    for (int i = 0; i < numbEnteries(destDir); i++)
+    {
+        if (destDir[i].file_name == destFile)
+        {
+            if (destDir[i].type == TYPE_FILE)
+            {
+                std::cout << "ERROR: File already exists\n";
+                return 0;
+            }
+            else if (destDir[i].type == TYPE_DIR)
+            {
+                this->getDirectory(destpath, destDir, destFatId, true);
+                directory = true;
+                break;
+            }   
+        }
+    }
+
+    if (directory)
+    {
+        for (int i = 0; i < numbEnteries(destDir); i++)
+        {
+            if (destDir[i].file_name == file)
+            {
+                std::cout << "ERROR: File already exists\n";
+                return 0;
+            }
+        }
+    }
+
+    //Reads in the text if you have access to the file
+    std::string fileText;
+    int accessRight = dir[index].access_rights;
+    if (accessRight == READ || accessRight == 0x06 || accessRight == 0x07)
+    {
+        readFromDisk(fileText, index, dir);
+    }
+    else
+    {
+        std::cout << "ERROR: Access denied\n";
+        return 0;
+    }
+
+    //Creating the new file for workingdirectory
+    int newIndex = numbEnteries(destDir);
+    int block = -1;
+
+    if (directory || destFile == "/")
+    {
+        //Adds file to new directory
+        strcpy(destDir[newIndex].file_name, file.c_str());
+        destDir[newIndex].size = dir[index].size;
+        destDir[newIndex].type = dir[index].type;
+        destDir[newIndex].access_rights = dir[index].access_rights;
+        writeToDisk(fileText, destDir[newIndex].size, block, true);
+        destDir[newIndex].first_blk = block;
+        disk.write(destFatId, (uint8_t*)destDir);
+
+        //Removes file from old directory
+        int nrEntries = numbEnteries(dir);
+        int fatIndex, lastPlace = dir[nrEntries-1].first_blk;
+        dir[index] = dir[nrEntries-1];
+        dir[nrEntries-1].type = TYPE_EMPTY;
+
+        while (lastPlace != FAT_EOF)
+        {
+            fatIndex = fat[lastPlace];
+            fat[lastPlace] = FAT_FREE;
+            lastPlace = fatIndex;
+        }
+        disk.write(dirFatId, (uint8_t*)dir);
+    }
+    else
+    {
+        strcpy(dir[index].file_name, destFile.c_str());
+        disk.write(dirFatId, (uint8_t*)dir);
+    }
+
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
+    if ( currentBlock == dirFatId)
+    {
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
@@ -296,7 +496,85 @@ FS::mv(std::string sourcepath, std::string destpath)
 int
 FS::rm(std::string filepath)
 {
-    std::cout << "FS::rm(" << filepath << ")\n";
+    dir_entry dir[64];
+    int dirFatId;
+    if(this->getDirectory(filepath, dir, dirFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string file = getFile(filepath);
+
+    int index = -1;
+    bool directory = false;
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == file)
+        {
+            if (dir[i].type == TYPE_DIR)
+            {
+                getDirectory(filepath, dir, dirFatId, true);
+                directory = true;
+            }
+
+            index = i;
+            break;
+        }
+    }
+
+    if (index == -1)
+    {
+        std::cout << "ERROR: Could not find file\n";
+        return 0;
+    }
+
+    if (directory)
+    {
+        if (numbEnteries(dir) > 1)
+        {
+            std::cout << "ERROR: Directory is not empty\n";
+            return 0;
+        }
+        else
+        {
+            //Removes directory
+            getDirectory(filepath, dir, dirFatId, false);
+            int nrEntries = numbEnteries(dir);
+            dir[index] = dir[nrEntries-1];
+            dir[nrEntries-1].type = TYPE_EMPTY;
+            int fatIndex, lastPlace = dir[nrEntries-1].first_blk;
+
+            while (lastPlace != FAT_EOF)
+            {
+                fatIndex = fat[lastPlace];
+                fat[lastPlace] = FAT_FREE;
+                lastPlace = fatIndex;
+            }
+            disk.write(dirFatId, (uint8_t*)dir);
+        }
+    }
+    else
+    {
+        //Replaces and removes
+        int nrEntries = numbEnteries(dir);
+        int fatIndex, lastPlace = dir[nrEntries-1].first_blk;
+        dir[index] = dir[nrEntries-1];
+        dir[nrEntries-1].type = TYPE_EMPTY;
+
+        while (lastPlace != FAT_EOF)
+        {
+            fatIndex = fat[lastPlace];
+            fat[lastPlace] = FAT_FREE;
+            lastPlace = fatIndex;
+        }
+        disk.write(dirFatId, (uint8_t*)dir);
+    }
+
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
+    if ( currentBlock == dirFatId)
+    {
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
@@ -305,7 +583,112 @@ FS::rm(std::string filepath)
 int
 FS::append(std::string filepath1, std::string filepath2)
 {
-    std::cout << "FS::append(" << filepath1 << "," << filepath2 << ")\n";
+    dir_entry dir[64];
+    dir_entry destDir[64];
+    int dirFatId;
+    if(this->getDirectory(filepath1, dir, dirFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string file = getFile(filepath1);
+
+    if(this->getDirectory(filepath2, destDir, dirFatId, false) == -1)
+    {
+        std::cout << "ERROR: No dir found\n";
+        return 0;
+    }
+    std::string destFile = getFile(filepath2);
+
+    //Making sure the first file exists
+    int index1 = -1, index2 = -1;
+    bool right1 = false, right2 = false;
+    uint8_t accessRight;
+
+    for (int i = 0; i < numbEnteries(dir); i++)
+    {
+        if (dir[i].file_name == file)
+        {
+            if (dir[i].type == TYPE_DIR)
+            {
+                std::cout << "ERROR: The first needs to be a file\n";
+                return 0;
+            }
+
+            index1 = i;
+            accessRight = dir[i].access_rights;
+            if (accessRight == READ || accessRight == 0x06 || accessRight == 0x07)
+            {
+                right1 = true;
+            }
+            break;
+        }
+    }
+
+    for (int i = 0; i < numbEnteries(destDir); i++)
+    {
+        if (destDir[i].file_name == destFile)
+        {
+            if (destDir[i].type == TYPE_DIR)
+            {
+                std::cout << "ERROR: The second needs to be a file\n";
+                return 0;
+            }
+            
+            index2 = i;
+            accessRight = destDir[i].access_rights;
+            if (accessRight == WRITE || accessRight == 0x06 || accessRight == 0x07)
+            {
+                right2 = true;
+            }
+            break;
+        }
+    }
+
+    if (index1 == -1 || index2 == -1)
+    {
+        std::cout << "ERROR: File does not exist\n";
+        return 0;
+    }
+    else if (!right1 || !right2)
+    {
+        std::cout << "ERROR: Access denied\n";
+        return 0;
+    }
+
+    //Read and write to files
+    std::string fileText;
+    readFromDisk(fileText, index2, destDir);
+    readFromDisk(fileText, index1, dir);
+
+    int count = 0, temp = 0;
+    std::string fixedText;
+    int fileSize = fileText.size();
+    int lastBlock = destDir[index2].first_blk;
+    destDir[index2].size = fileSize;
+
+    while (lastBlock != FAT_EOF)
+    {
+        fixedText = fileText.substr(4096 * count, 4096);
+        disk.write(lastBlock, (uint8_t*)fixedText.c_str());
+        lastBlock = fat[lastBlock];
+        fileSize -= 4096;
+        count++;
+    }
+
+    //If the file needs more blocks
+    if (fileSize > 0)
+    {
+        writeToDisk(fileText, fileSize, temp, false);
+    }
+
+    disk.write(dirFatId, (uint8_t*)destDir);
+    disk.write(FAT_BLOCK, (uint8_t*)fat);
+
+    if (currentBlock == dirFatId)
+    {
+        disk.read(currentBlock, (uint8_t*)this->workingDirectory);
+    }
     return 0;
 }
 
@@ -322,7 +705,8 @@ FS::mkdir(std::string dirpath)
     std::string name = this->getFile(dirpath);
     dir_entry dir[64];
     int dirFatId;
-    if(this->getDirectory(dirpath, dir, dirFatId) == -1)
+    bool fromRoot = dirpath[0] == '/';
+    if(this->getDirectory(dirpath, dir, dirFatId, false) == -1)
     {
         std::cout << "ERROR: No dir found\n";
         return 0;
@@ -336,7 +720,7 @@ FS::mkdir(std::string dirpath)
     }
     for (int i = 0; i < num; i++)
     {
-        if(dir[i].file_name == name.c_str())
+        if(dir[i].file_name == name)
         {
             std::cout << "ERROR: Name exists\n";
             return 0;
@@ -456,7 +840,7 @@ FS::chmod(std::string accessrights, std::string filepath)
     std::string name = this->getFile(filepath);
     dir_entry dir[64];
     int dirFatId;
-    if(this->getDirectory(filepath, dir, dirFatId) == -1)
+    if(this->getDirectory(filepath, dir, dirFatId, false) == -1)
     {
         std::cout << "ERROR: No dir found\n";
         return 0;
@@ -520,10 +904,10 @@ void FS::writeToDisk(std::string fileText, int fileSize, int &FirstBlock, bool f
 }
 
 //Reads from the disk
-void FS::readFromDisk(std::string& fileText, int fileIndex)
+void FS::readFromDisk(std::string& fileText, int fileIndex, dir_entry* dir)
 {
     char* buffer;
-    int lastPlace = workingDirectory[fileIndex].first_blk;
+    int lastPlace = dir[fileIndex].first_blk;
 
     while (lastPlace != FAT_EOF)
     {
@@ -605,13 +989,13 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
     strcpy(text, path.c_str());
     std::vector <std::string> directories;
     std::string directory;
+    bool fromRoot = false;
 
     for (int i = 0; i < path.size(); i++)
     {
         if (i == 0 && text[i] == '/')
         {
-            directory = text[i];
-            directories.push_back(directory);
+            fromRoot = true;
             directory = "";
         }
         else if (i > 0 && text[i] == '/')
@@ -627,24 +1011,31 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
 
     if(cd)
     { 
-        directories.push_back(directory);
+        if(fromRoot && directory.size() == 0) {}
+        else
+        {
+            directories.push_back(directory);
+        }
     }
 
-    dir_entry dirs[64];
-    for (int i = 0; i < 64; i++)
+    //dir_entry dirs[64];
+    if(fromRoot)
     {
-        dirs[i] = workingDirectory[i];
-        newBlock = this->currentBlock;
+        disk.read(ROOT_BLOCK, (uint8_t*)dir);
+        newBlock = 0;
     }
-
-    //If the file is in the same directory
-    if (directories.size() == 0)
+    else
     {
         for (int i = 0; i < 64; i++)
         {
             dir[i] = workingDirectory[i];
             newBlock = this->currentBlock;
         }
+    }
+    
+    //If the file is in the same directory
+    if (directories.size() == 0)
+    {
         return 1;
     }
 
@@ -655,15 +1046,10 @@ int FS::getDirectory(std::string path, dir_entry* dir, int& newBlock, bool cd)
         found = false;
         for (int j = 0; j < count; j++)
         {
-            if(strcmp(dirs[j].file_name, directories[i].c_str()) == 0 && dirs[j].type == TYPE_DIR)
+            if(strcmp(dir[j].file_name, directories[i].c_str()) == 0 && dir[j].type == TYPE_DIR)
             {
-                newBlock = dirs[j].first_blk;
-                disk.read(dirs[j].first_blk, (uint8_t*)dirs);
-                for (int i = 0; i < 64; i++)
-                {
-                    dir[i] = dirs[i];
-                }
-                
+                newBlock = dir[j].first_blk;
+                disk.read(dir[j].first_blk, (uint8_t*)dir);                
                 found = true;
                 count = 64;
                 break;
